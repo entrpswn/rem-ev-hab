@@ -128,7 +128,7 @@ struct ContentView: View {
     @State private var editingItemId: UUID?
 
     var body: some View {
-        VStack(spacing: 0) { // Changed from ZStack to VStack
+        VStack(spacing: 10) { // Changed from ZStack to VStack
             content
             addButton
         }
@@ -160,7 +160,7 @@ struct ContentView: View {
             VStack(alignment: .trailing) {
                 Text("October '24")
                     .font(.headline)
-                    .foregroundColor(.lightGray)
+                    .foregroundColor(.gray)
                 Text("Tuesday")
                     .font(.subheadline)
                     .foregroundColor(.lightGray)
@@ -180,7 +180,7 @@ struct ContentView: View {
                     header: Text(section.type.headerTitle)
                         .font(.subheadline)
                         .foregroundColor(.secondary)
-                        .padding(.horizontal, 10)
+                        .padding(.horizontal, 6)
                         .padding(.vertical, 8)
                 ) {
                     ForEach(section.items.indices, id: \.self) { itemIndex in
@@ -190,10 +190,16 @@ struct ContentView: View {
                             set: { self.sections[sectionIndex].items[itemIndex] = $0 }
                         )
 
-                        EditableTaskRow(task: itemBinding, isEditing: editingItemId == item.id) {
-                            editingItemId = (editingItemId == item.id) ? nil : item.id
-                        }
-                        
+                       let isLastItem = itemIndex == section.items.count - 1
+
+                        EditableTaskRow(
+                            task: itemBinding,
+                            isEditing: editingItemId == item.id,
+                            onCommit: {
+                                editingItemId = (editingItemId == item.id) ? nil : item.id
+                            },
+                            showDivider: !isLastItem // Pass the showDivider parameter
+                        )
                         .swipeActions(edge: .trailing) {
                             if item.type == .task || item.type == .habit {
                                 Button(role: .destructive) {
@@ -203,14 +209,9 @@ struct ContentView: View {
                                 }
                             }
                         }
-                        .listRowSeparator(.hidden) // Hide default separator if using custom divider
+                        .listRowSeparator(.hidden)
                         .listRowInsets(EdgeInsets(top: 0, leading: 28, bottom: 0, trailing: 28))
                         .listRowBackground(Color(UIColor.systemBackground))
-
-                        // Add custom divider except for the last item
-                        if itemIndex < section.items.count - 1 {
-                            DottedDivider()
-                        }
                     }
                 }
                 .textCase(nil)
@@ -220,7 +221,8 @@ struct ContentView: View {
         .scrollContentBackground(.hidden)
         .background(Color(UIColor.systemBackground))
     }
-
+    
+    
     private var addButton: some View {
         Button(action: {
             showingSheet = true
@@ -345,62 +347,72 @@ struct EditableTaskRow: View {
     @Binding var task: TaskRow
     var isEditing: Bool
     var onCommit: () -> Void
-    @State private var isChecked: Bool = false
+    var showDivider: Bool
     @FocusState private var isFieldFocused: Bool
 
     var body: some View {
-        HStack {
-            if task.type == .task || task.type == .habit {
-                Toggle(isOn: $isChecked.animation(.spring())) {
-                    EmptyView()
-                }
-                .toggleStyle(CheckboxStyle(isDotted: task.type == .habit))
-                .onChange(of: isChecked) { newValue in
-                    withAnimation {
-                        task.isCompleted = newValue
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                if task.type == .task || task.type == .habit {
+                    // Custom Checkbox Button
+                    Button(action: {
+                        withAnimation {
+                            task.isCompleted.toggle()
+                        }
+                    }) {
+                        Image(systemName: task.isCompleted ? "checkmark.square.fill" : (task.type == .habit ? "square.dotted" : "square"))
+                            .resizable()
+                            .frame(width: 20, height: 20)
+                            .foregroundColor(task.isCompleted ? .blue : .lightBlue)
                     }
+                    .buttonStyle(PlainButtonStyle())
+                } else {
+                    Image(systemName: task.customIconName ?? task.type.defaultIconName)
+                        .resizable()
+                        .frame(width: 20, height: 20)
+                        .foregroundColor(task.iconColor ?? .blue)
                 }
-            } else {
-                Image(systemName: task.customIconName ?? task.type.defaultIconName)
-                    .font(.system(size: 24))
-                    .frame(width: 30, height: 30)
-                    .foregroundColor(task.iconColor ?? .blue)
-            }
 
-            if isEditing {
-                TextField("Enter title", text: $task.title, onCommit: {
-                    onCommit()
-                    isFieldFocused = false
-                })
-                .textFieldStyle(PlainTextFieldStyle())
-                .font(.system(size: 16, weight: .semibold))
-                .focused($isFieldFocused)
-                .onAppear {
-                    isFieldFocused = true
-                }
-            } else {
-                Text(task.title)
-                    .font(.system(size: 16, weight: .semibold))
-                    .strikethrough(task.isCompleted, color: .darkGray)
-                    .foregroundColor(task.isCompleted ? .darkGray : (task.disabled ? .lightGray : .primary))
-                    .onTapGesture {
+                if isEditing {
+                    TextField("Enter title", text: $task.title, onCommit: {
                         onCommit()
+                        isFieldFocused = false
+                    })
+                    .textFieldStyle(PlainTextFieldStyle())
+                    .font(.system(size: 18, weight: .semibold))
+                    .focused($isFieldFocused)
+                    .onAppear {
+                        isFieldFocused = true
                     }
+                } else {
+                    Text(task.title)
+                        .font(.system(size: 18, weight: .semibold))
+                        .strikethrough(task.isCompleted, color: .darkGray)
+                        .foregroundColor(task.isCompleted ? .darkGray : (task.disabled ? .lightGray : .primary))
+                        .onTapGesture {
+                            onCommit()
+                        }
+                }
+
+                Spacer()
+
+                if let time = task.time {
+                    Text(time)
+                        .font(.system(size: 14))
+                        .foregroundColor(.lightGray)
+                }
             }
+            .padding(.vertical, 4)
 
-            Spacer()
-
-            if let time = task.time {
-                Text(time)
-                    .foregroundColor(.lightGray)
+            if showDivider {
+                Divider()
+                    .background(Color.lightGray.opacity(0.5))
+                    //.padding(.leading, 1) // Adjust based on your layout
+                    .padding(.horizontal, 1)
+                    .padding(.vertical, 16)
             }
         }
-        .frame(height: 40) // Set a fixed height for the row
-        .opacity(task.disabled ? 0.5 : 1.0)
-        .padding(.vertical, 1) //adjust padding for list items
-        .onAppear {
-            isChecked = task.isCompleted
-        }
+        .opacity(task.disabled ? 0.5 : 1.0) // Apply opacity to the entire VStack
     }
 }
 
@@ -426,28 +438,21 @@ struct CheckboxStyle: ToggleStyle {
 // MARK: - DottedDivider
 
 struct DottedDivider: View {
-    var lineWidth: CGFloat = 1
-    var lineCap: CGLineCap = .butt
-    var dash: [CGFloat] = [2, 3]
-    var dashPhase: CGFloat = 0
-    var color: Color = Color.lightGray.opacity(0.2)
-    var padding: CGFloat = 12
-
     var body: some View {
         Rectangle()
-            .frame(height: lineWidth)
+            .frame(height: 1)
             .foregroundColor(.clear)
             .overlay(
                 Rectangle()
                     .stroke(style: StrokeStyle(
-                        lineWidth: lineWidth,
-                        lineCap: lineCap,
-                        dash: dash,
-                        dashPhase: dashPhase
+                        lineWidth: 1,
+                        lineCap: .round,
+                        dash: [1, 3],
+                        dashPhase: 0
                     ))
-                    .foregroundColor(color)
+                    .foregroundColor(Color.red.opacity(0.9))
             )
-            .padding(.horizontal, padding)
+            .padding(.horizontal, 28)
     }
 }
 // MARK: - Preview
